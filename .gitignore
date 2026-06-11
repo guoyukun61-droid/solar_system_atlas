@@ -25,3 +25,5 @@ Thumbs.db
 playwright-report/
 test-results/
 *.trace.zip
+
+.vercel
