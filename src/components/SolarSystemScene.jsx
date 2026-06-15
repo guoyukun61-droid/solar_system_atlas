@@ -7,6 +7,8 @@ import { bodies, bodyById } from "../data/bodies.js";
 const orbitTilt = -0.08;
 const sunPosition = new THREE.Vector3(0, 0, 0);
 const tempPosition = new THREE.Vector3();
+const FULL_FOCUS_DESKTOP_NDC_X = -0.58;
+const FULL_FOCUS_SUN_NDC_X = -0.46;
 
 function seededRandom(seed) {
   let value = seed;
@@ -295,6 +297,11 @@ function getBodyPosition(body, elapsed) {
   return getOrbitPoint(body, angle, tempPosition);
 }
 
+function getFullFocusLookOffset(distance, fov, aspect, desiredNdcX) {
+  const halfFrustumWidth = distance * Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect;
+  return Math.abs(desiredNdcX) * halfFrustumWidth;
+}
+
 function CameraRig({ focusLevel, selectedBodyId, bodyPositions }) {
   const { camera, size } = useThree();
   const lookAtRef = useRef(new THREE.Vector3(1.8, 0.1, -0.2));
@@ -338,7 +345,7 @@ function CameraRig({ focusLevel, selectedBodyId, bodyPositions }) {
       }
 
       if (isFullFocus) {
-        const lookX = isMobile ? 0 : radius * 0.16;
+        const fullFocusFov = isMobile ? 38 : 31;
         const lookY = isMobile ? -radius * 0.34 : 0;
         const cameraDistance = isSun
           ? radius * 2.72 + 2.1
@@ -346,7 +353,14 @@ function CameraRig({ focusLevel, selectedBodyId, bodyPositions }) {
             ? Math.max(radius * 4.95, 3.2)
             : Math.max(radius * (isMobile ? 4.55 : 3.65), isMobile ? 2.25 : 1.46);
         const height = isMobile ? radius * 0.18 : radius * 0.08;
-        const cameraX = isMobile ? radius * 0.04 : radius * 0.16;
+        const cameraX = isMobile ? radius * 0.04 : radius * 0.08;
+        const desktopLookOffset = getFullFocusLookOffset(
+          cameraDistance,
+          fullFocusFov,
+          size.width / Math.max(size.height, 1),
+          isSun ? FULL_FOCUS_SUN_NDC_X : FULL_FOCUS_DESKTOP_NDC_X,
+        );
+        const lookX = isMobile ? 0 : Math.max(radius * 0.22, desktopLookOffset);
 
         if (isSun) {
           targetLookAt.copy(selectedPosition).add(new THREE.Vector3(lookX, lookY, 0));
@@ -362,7 +376,7 @@ function CameraRig({ focusLevel, selectedBodyId, bodyPositions }) {
             .addScaledVector(tangentDir, cameraX)
             .addScaledVector(upDir, height);
         }
-        camera.fov = THREE.MathUtils.lerp(camera.fov, isMobile ? 38 : 31, 1 - Math.exp(-delta * 2.55));
+        camera.fov = THREE.MathUtils.lerp(camera.fov, fullFocusFov, 1 - Math.exp(-delta * 2.55));
       } else {
         const panelBias = isMobile ? 0 : isSun ? 1.15 : 1.85 + radius * 0.7;
         const mobileLookOffset = isSun ? -1.15 : -1.75 - radius * 0.25;
