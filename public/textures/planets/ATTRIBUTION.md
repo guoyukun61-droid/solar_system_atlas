@@ -13,8 +13,10 @@ Pluto texture used for the sphere map:
 - Source file: `Pluto color mapmosaic.jpg`
 - Source page: https://commons.wikimedia.org/wiki/File:Pluto_color_mapmosaic.jpg
 - Original map credit on Wikimedia: NASA/JPL/USGS
+- In-app file: `hires/pluto-cinematic-map.jpg`
+- Notes: derived from the NASA/JPL/USGS map mosaic with the black no-data region procedurally filled for continuous sphere rendering.
 
-Previous Pluto reference image retained in the folder but no longer used as the sphere texture:
+Original and reference Pluto images retained in the folder:
 
 - Source: NASA/JPL-Caltech/New Horizons, `PIA19956 - Pluto in Extended Color`
 - URL: https://www.jpl.nasa.gov/images/pia19956-pluto-in-extended-color/

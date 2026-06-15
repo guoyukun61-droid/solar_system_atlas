@@ -81,6 +81,8 @@ const planetFragment = `
   uniform vec3 uDarkFill;
   uniform float uDarkFillStrength;
   uniform float uRimStrength;
+  uniform vec2 uUvScale;
+  uniform vec2 uUvOffset;
 
   varying vec2 vUv;
   varying vec3 vWorldNormal;
@@ -94,13 +96,14 @@ const planetFragment = `
     float light = smoothstep(-0.24, 0.82, ndl);
     float rim = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.45);
     float sunRim = rim * smoothstep(-0.25, 0.65, ndl);
-    vec3 rawTex = texture2D(uMap, vUv).rgb;
+    vec2 mapUv = vUv * uUvScale + uUvOffset;
+    vec3 rawTex = texture2D(uMap, mapUv).rgb;
     float missingTexture = 1.0 - smoothstep(0.018, 0.095, dot(rawTex, vec3(0.333)));
     vec3 tex = pow(mix(rawTex, uDarkFill, missingTexture * uDarkFillStrength), vec3(1.12));
     tex = clamp((tex - 0.5) * (1.0 + uBandStrength * 0.55) + 0.5, 0.0, 1.2);
-    float bandPattern = sin(vUv.y * 86.0) * 0.5 + sin(vUv.y * 173.0 + vUv.x * 2.0) * 0.28;
-    float broadBands = 0.5 + 0.5 * sin(vUv.y * 38.0 + sin(vUv.y * 9.0) * 0.75);
-    float narrowBands = 0.5 + 0.5 * sin(vUv.y * 128.0 + vUv.x * 2.0);
+    float bandPattern = sin(mapUv.y * 86.0) * 0.5 + sin(mapUv.y * 173.0 + mapUv.x * 2.0) * 0.28;
+    float broadBands = 0.5 + 0.5 * sin(mapUv.y * 38.0 + sin(mapUv.y * 9.0) * 0.75);
+    float narrowBands = 0.5 + 0.5 * sin(mapUv.y * 128.0 + mapUv.x * 2.0);
     tex *= 1.0 - (1.0 - broadBands) * 0.16 * uBandStrength;
     tex *= 1.0 + (narrowBands - 0.5) * 0.05 * uBandStrength;
     tex *= 1.0 + bandPattern * 0.055 * uBandStrength;
@@ -238,6 +241,11 @@ function configureTexture(texture, anisotropy = 8) {
   texture.anisotropy = anisotropy;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+}
+
+function applyTextureWindow(texture, body) {
+  texture.repeat.set(body.textureRepeatX ?? 1, body.textureRepeatY ?? 1);
+  texture.offset.set(body.textureOffsetX ?? 0, body.textureOffsetY ?? 0);
 }
 
 function makeFlareTexture() {
@@ -950,17 +958,31 @@ function PlanetBody({ body, focusLevel, selectedBodyId, onSelectBody, onPosition
       uDarkFill: { value: new THREE.Color(body.darkFillColor ?? "#4b403a") },
       uDarkFillStrength: { value: body.darkFillColor ? 1 : 0 },
       uRimStrength: { value: body.rimStrength ?? 0.08 },
+      uUvScale: { value: new THREE.Vector2(body.textureRepeatX ?? 1, body.textureRepeatY ?? 1) },
+      uUvOffset: { value: new THREE.Vector2(body.textureOffsetX ?? 0, body.textureOffsetY ?? 0) },
     }),
-    [body.accentColor, body.bandStrength, body.darkFillColor, body.lightResponse, body.rimStrength, texture],
+    [
+      body.accentColor,
+      body.bandStrength,
+      body.darkFillColor,
+      body.lightResponse,
+      body.rimStrength,
+      body.textureOffsetX,
+      body.textureOffsetY,
+      body.textureRepeatX,
+      body.textureRepeatY,
+      texture,
+    ],
   );
 
   useEffect(() => {
     configureTexture(texture, 12);
+    applyTextureWindow(texture, body);
 
     if (ringTexture) {
       configureTexture(ringTexture, 12);
     }
-  }, [ringTexture, texture]);
+  }, [body, ringTexture, texture]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
