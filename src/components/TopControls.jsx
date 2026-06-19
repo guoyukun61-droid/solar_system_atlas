@@ -1,6 +1,13 @@
-import { Globe2, Maximize2, Minimize2, RotateCcw } from "lucide-react";
+import { Globe2, Maximize2, Minimize2, Rocket, RotateCcw } from "lucide-react";
 
-export function TopControls({ focusLevel, onExitCloseFocus, onResetView, onToggleCelestialGrid, showCelestialGrid }) {
+export function TopControls({
+  focusLevel,
+  onEnterExplore,
+  onExitCloseFocus,
+  onResetView,
+  onToggleCelestialGrid,
+  showCelestialGrid,
+}) {
   function requestFullscreen() {
     const root = document.documentElement;
 
@@ -20,6 +27,10 @@ export function TopControls({ focusLevel, onExitCloseFocus, onResetView, onToggl
           <span>退出近景</span>
         </button>
       ) : null}
+      <button className="explore-button" type="button" onClick={onEnterExplore} title="从太阳系外围开始自由漫游" aria-label="自由漫游">
+        <Rocket size={16} strokeWidth={1.9} />
+        <span>自由漫游</span>
+      </button>
       <button
         aria-label={showCelestialGrid ? "关闭天球坐标系" : "打开天球坐标系"}
         data-active={showCelestialGrid ? "true" : "false"}

@@ -22,3 +22,6 @@ Original and reference Pluto images retained in the folder:
 - URL: https://www.jpl.nasa.gov/images/pia19956-pluto-in-extended-color/
 
 The selected visual reference for implementation is saved separately at `design/orbital-cinema-reference.png`.
+# Generated background
+
+- `hires/stars-milky-way-cinematic.png`: original AI-generated deep-space panorama created for Solaris Atlas. It contains no embedded planets or UI and is used as the interior sky-sphere texture.

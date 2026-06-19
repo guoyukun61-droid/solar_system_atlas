@@ -9,6 +9,24 @@ const sunPosition = new THREE.Vector3(0, 0, 0);
 const tempPosition = new THREE.Vector3();
 const FULL_FOCUS_DESKTOP_NDC_X = -0.58;
 const FULL_FOCUS_SUN_NDC_X = -0.46;
+const EXPLORE_TRANSITION_SECONDS = 1.4;
+const EXPLORE_BASE_SPEED = 1.25;
+const EXPLORE_DISTANCE_SCALE = 2.15;
+
+const satelliteRecords = [
+  { id: "moon", parentId: "earth", radius: 0.12, orbitRadius: 1.08, speed: 0.42, phase: 0.4, color: "#c7c3b9" },
+  { id: "phobos", parentId: "mars", radius: 0.045, orbitRadius: 0.7, speed: 0.82, phase: 2.1, color: "#8d7768" },
+  { id: "deimos", parentId: "mars", radius: 0.036, orbitRadius: 0.94, speed: 0.51, phase: 4.7, color: "#b0a193" },
+  { id: "io", parentId: "jupiter", radius: 0.075, orbitRadius: 1.48, speed: 0.7, phase: 0.8, color: "#d6b46c" },
+  { id: "europa", parentId: "jupiter", radius: 0.066, orbitRadius: 1.77, speed: 0.52, phase: 2.7, color: "#d9d1b5" },
+  { id: "ganymede", parentId: "jupiter", radius: 0.092, orbitRadius: 2.12, speed: 0.36, phase: 4.3, color: "#8f8170" },
+  { id: "callisto", parentId: "jupiter", radius: 0.086, orbitRadius: 2.52, speed: 0.27, phase: 5.6, color: "#72665d" },
+  { id: "enceladus", parentId: "saturn", radius: 0.048, orbitRadius: 1.58, speed: 0.58, phase: 1.4, color: "#e3edf0" },
+  { id: "titan", parentId: "saturn", radius: 0.1, orbitRadius: 2.62, speed: 0.29, phase: 3.4, color: "#d8a862" },
+  { id: "titania", parentId: "uranus", radius: 0.066, orbitRadius: 1.48, speed: 0.34, phase: 2.4, color: "#b7c1c4" },
+  { id: "triton", parentId: "neptune", radius: 0.076, orbitRadius: 1.52, speed: -0.32, phase: 4.2, color: "#c5b8aa" },
+  { id: "charon", parentId: "pluto", radius: 0.062, orbitRadius: 0.68, speed: 0.38, phase: 1.9, color: "#9c9188" },
+];
 
 function seededRandom(seed) {
   let value = seed;
@@ -265,44 +283,117 @@ function makeFlareTexture() {
   return texture;
 }
 
+function BrightStarLayer() {
+  const geometry = useMemo(() => {
+    const random = seededRandom(8173);
+    const positions = [];
+    const colors = [];
+
+    for (let index = 0; index < 260; index += 1) {
+      const radius = 72 + random() * 92;
+      const theta = random() * Math.PI * 2;
+      const phi = Math.acos(2 * random() - 1);
+      const warmth = random();
+      positions.push(
+        radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta),
+      );
+      colors.push(
+        warmth > 0.82 ? 1 : 0.66,
+        warmth > 0.82 ? 0.72 : 0.86,
+        warmth > 0.82 ? 0.48 : 1,
+      );
+    }
+
+    const result = new THREE.BufferGeometry();
+    result.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    result.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    return result;
+  }, []);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <points geometry={geometry}>
+      <pointsMaterial
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        opacity={0.9}
+        size={0.28}
+        sizeAttenuation
+        transparent
+        vertexColors
+      />
+    </points>
+  );
+}
+
 function SpaceBackdrop() {
-  const texture = useTexture("/textures/planets/hires/stars-milky-way-8k.jpg");
+  const [baseTexture, dustTexture] = useTexture([
+    "/textures/planets/hires/stars-milky-way-8k.jpg",
+    "/textures/planets/hires/stars-milky-way-cinematic.png",
+  ]);
+  const skyRef = useRef();
+  const starFieldRef = useRef();
 
   useEffect(() => {
-    configureTexture(texture, 12);
-  }, [texture]);
+    configureTexture(baseTexture, 12);
+    configureTexture(dustTexture, 10);
+  }, [baseTexture, dustTexture]);
+
+  useFrame(({ camera }) => {
+    skyRef.current?.position.copy(camera.position);
+
+    if (starFieldRef.current && starFieldRef.current.position.distanceToSquared(camera.position) > 48 * 48) {
+      starFieldRef.current.position.copy(camera.position);
+    }
+  });
 
   return (
     <>
       <color attach="background" args={["#010207"]} />
-      <mesh position={[3.4, 4, -58]} rotation={[0, 0, -0.2]}>
-        <planeGeometry args={[98, 47]} />
-        <meshBasicMaterial depthWrite={false} map={texture} opacity={0.42} transparent />
-      </mesh>
-      <mesh position={[-18, -7, -72]} rotation={[0.08, 0.32, 0.12]}>
-        <planeGeometry args={[118, 54]} />
-        <meshBasicMaterial
-          blending={THREE.AdditiveBlending}
-          color="#6eb8ff"
-          depthWrite={false}
-          map={texture}
-          opacity={0.11}
-          transparent
-        />
-      </mesh>
-      <Stars count={9200} depth={96} factor={3.6} fade radius={100} saturation={0.7} speed={0.14} />
-      <Stars count={5200} depth={150} factor={5.8} fade radius={154} saturation={0.9} speed={0.04} />
+      <group ref={skyRef} rotation={[0.12, -1.05, -0.16]}>
+        <mesh>
+          <sphereGeometry args={[205, 72, 48]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            depthWrite={false}
+            map={baseTexture}
+            side={THREE.BackSide}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh rotation={[0.015, 0.045, -0.02]}>
+          <sphereGeometry args={[203.5, 72, 48]} />
+          <meshBasicMaterial
+            blending={THREE.AdditiveBlending}
+            color="#788ca8"
+            depthWrite={false}
+            map={dustTexture}
+            opacity={0.24}
+            side={THREE.BackSide}
+            toneMapped={false}
+            transparent
+          />
+        </mesh>
+      </group>
+      <group ref={starFieldRef}>
+        <Stars count={9800} depth={104} factor={3.4} fade radius={112} saturation={0.72} speed={0.1} />
+        <Stars count={5600} depth={176} factor={5.6} fade radius={182} saturation={0.94} speed={0.035} />
+        <BrightStarLayer />
+      </group>
     </>
   );
 }
 
-function getBodyPosition(body, elapsed) {
+function getBodyPosition(body, elapsed, distanceScale = 1) {
   if (body.id === "sun") {
     return tempPosition.set(0, 0, 0);
   }
 
   const angle = body.initialAngle + elapsed * body.orbitSpeed;
-  return getOrbitPoint(body, angle, tempPosition);
+  return getOrbitPoint(body, angle, tempPosition).multiplyScalar(distanceScale);
 }
 
 function getFullFocusLookOffset(distance, fov, aspect, desiredNdcX) {
@@ -414,6 +505,399 @@ function CameraRig({ focusLevel, selectedBodyId, bodyPositions }) {
   return null;
 }
 
+function ExploreCameraRig({
+  bodyPositions,
+  exploreSpeed,
+  onNearbyBodyChange,
+  onExploreSpeedChange,
+}) {
+  const { camera, gl, size } = useThree();
+  const pointerTarget = useRef(new THREE.Vector2());
+  const pointerCurrent = useRef(new THREE.Vector2());
+  const touchOrigin = useRef(null);
+  const startPosition = useRef(new THREE.Vector3());
+  const startQuaternion = useRef(new THREE.Quaternion());
+  const launchPosition = useRef(new THREE.Vector3());
+  const launchQuaternion = useRef(new THREE.Quaternion());
+  const transitionTime = useRef(0);
+  const initialized = useRef(false);
+  const lastNearbyUpdate = useRef(0);
+  const forward = useMemo(() => new THREE.Vector3(), []);
+  const right = useMemo(() => new THREE.Vector3(), []);
+  const offset = useMemo(() => new THREE.Vector3(), []);
+  const targetDirection = useMemo(() => new THREE.Vector3(), []);
+  const projectedTarget = useMemo(() => new THREE.Vector3(), []);
+  const launchDirection = useMemo(() => new THREE.Vector3(), []);
+  const outerAnchor = useMemo(() => new THREE.Vector3(), []);
+  const tangentDir = useMemo(() => new THREE.Vector3(), []);
+  const lookTarget = useMemo(() => new THREE.Vector3(), []);
+  const worldUp = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  const yawQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  const pitchQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  const lookMatrix = useMemo(() => new THREE.Matrix4(), []);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const handlePointerMove = (event) => {
+      if (event.pointerType === "touch") return;
+      const rect = canvas.getBoundingClientRect();
+      pointerTarget.current.set(
+        THREE.MathUtils.clamp(((event.clientX - rect.left) / rect.width) * 2 - 1, -1, 1),
+        THREE.MathUtils.clamp(-(((event.clientY - rect.top) / rect.height) * 2 - 1), -1, 1),
+      );
+    };
+    const handlePointerLeave = () => pointerTarget.current.set(0, 0);
+    const handleTouchStart = (event) => {
+      if (!event.touches.length) return;
+      touchOrigin.current = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+      };
+      pointerTarget.current.set(0, 0);
+    };
+    const handleTouchMove = (event) => {
+      if (!event.touches.length || !touchOrigin.current) return;
+      const touch = event.touches[0];
+      pointerTarget.current.set(
+        THREE.MathUtils.clamp((touch.clientX - touchOrigin.current.x) / 72, -1, 1),
+        THREE.MathUtils.clamp((touchOrigin.current.y - touch.clientY) / 72, -1, 1),
+      );
+      event.preventDefault();
+    };
+    const handleTouchEnd = () => {
+      touchOrigin.current = null;
+      pointerTarget.current.set(0, 0);
+    };
+    const handleWheel = (event) => {
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? -0.2 : 0.2;
+      onExploreSpeedChange((value) => value + direction);
+    };
+
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerleave", handlePointerLeave);
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerleave", handlePointerLeave);
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      canvas.removeEventListener("touchend", handleTouchEnd);
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, [gl, onExploreSpeedChange]);
+
+  useFrame((state, delta) => {
+    if (!initialized.current) {
+      const neptune = bodyById.get("neptune");
+      const pluto = bodyById.get("pluto");
+      const neptuneAngle =
+        neptune.initialAngle + state.clock.elapsedTime * neptune.orbitSpeed;
+      const outerRadius =
+        getOrbitOuterRadius(pluto) * EXPLORE_DISTANCE_SCALE + 12;
+
+      initialized.current = true;
+      transitionTime.current = 0;
+      startPosition.current.copy(camera.position);
+      startQuaternion.current.copy(camera.quaternion);
+      getOrbitPoint(neptune, neptuneAngle, outerAnchor)
+        .multiplyScalar(EXPLORE_DISTANCE_SCALE);
+      launchDirection.copy(outerAnchor).sub(sunPosition).normalize();
+      launchPosition.current
+        .copy(launchDirection)
+        .multiplyScalar(outerRadius)
+        .addScaledVector(worldUp, 2.4);
+      tangentDir.set(-launchDirection.z, 0, launchDirection.x).normalize();
+      launchDirection.multiplyScalar(-1).addScaledVector(tangentDir, 0.055).normalize();
+      lookTarget.copy(launchPosition.current).addScaledVector(launchDirection, 18);
+      lookMatrix.lookAt(launchPosition.current, lookTarget, worldUp);
+      launchQuaternion.current.setFromRotationMatrix(lookMatrix);
+    }
+
+    if (!initialized.current) return;
+
+    transitionTime.current += delta;
+    const transitionProgress = THREE.MathUtils.clamp(
+      transitionTime.current / EXPLORE_TRANSITION_SECONDS,
+      0,
+      1,
+    );
+    const easedTransition = transitionProgress * transitionProgress * (3 - 2 * transitionProgress);
+
+    if (transitionProgress < 1) {
+      camera.position.lerpVectors(startPosition.current, launchPosition.current, easedTransition);
+      camera.quaternion.slerpQuaternions(startQuaternion.current, launchQuaternion.current, easedTransition);
+    } else {
+      const pointerDamp = 1 - Math.exp(-delta * 4.8);
+      pointerCurrent.current.lerp(pointerTarget.current, pointerDamp);
+      const deadZone = 0.11;
+      const steerX = Math.sign(pointerCurrent.current.x)
+        * smoothstep(deadZone, 1, Math.abs(pointerCurrent.current.x));
+      const steerY = Math.sign(pointerCurrent.current.y)
+        * smoothstep(deadZone, 1, Math.abs(pointerCurrent.current.y));
+      const yaw = -steerX * delta * 0.72;
+      const pitch = steerY * delta * 0.56;
+
+      yawQuaternion.setFromAxisAngle(worldUp, yaw);
+      camera.quaternion.premultiply(yawQuaternion);
+      right.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+      forward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+
+      const nextVertical = forward.y + pitch;
+      if (Math.abs(nextVertical) < 0.88) {
+        pitchQuaternion.setFromAxisAngle(right, pitch);
+        camera.quaternion.premultiply(pitchQuaternion);
+      }
+
+      forward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+      let speedLimiter = 1;
+      let detectedBody = null;
+      let detectedDistance = Number.POSITIVE_INFINITY;
+      let detectedScore = -1;
+
+      for (let bodyIndex = 0; bodyIndex < bodies.length; bodyIndex += 1) {
+        const body = bodies[bodyIndex];
+        const bodyPosition = bodyPositions.current.get(body.id);
+        if (!bodyPosition) continue;
+        offset.copy(camera.position).sub(bodyPosition);
+        const distance = offset.length();
+        const bodyRadius = body.id === "sun"
+          ? body.displayRadius * 1.45
+          : body.displayRadius * 1.2;
+        const influenceRadius = body.id === "sun"
+          ? bodyRadius * 5.4 + 2.8
+          : bodyRadius * 5.8 + 1.15;
+
+        if (distance < influenceRadius) {
+          const proximity = 1 - smoothstep(bodyRadius * 0.22, influenceRadius, distance);
+          const resistance = proximity * proximity;
+          speedLimiter = Math.min(speedLimiter, 1 - resistance * 0.965);
+        }
+
+        targetDirection.copy(bodyPosition).sub(camera.position);
+        if (targetDirection.lengthSq() > 0.0001) {
+          targetDirection.normalize();
+          const alignment = forward.dot(targetDirection);
+          if (alignment > 0.72) {
+            const score = alignment * alignment * alignment / Math.max(distance * 0.018, 1);
+            if (score > detectedScore) {
+              projectedTarget.copy(bodyPosition).project(camera);
+              if (projectedTarget.z > -1 && projectedTarget.z < 1) {
+                detectedScore = score;
+                detectedDistance = distance;
+                detectedBody = {
+                  alignment,
+                  code: String(bodyIndex).padStart(2, "0"),
+                  distance,
+                  id: body.id,
+                  nameEn: body.nameEn,
+                  nameZh: body.nameZh,
+                  screenX: THREE.MathUtils.clamp((projectedTarget.x * 0.5 + 0.5) * 100, 8, 92),
+                  screenY: THREE.MathUtils.clamp((-projectedTarget.y * 0.5 + 0.5) * 100, 12, 86),
+                };
+              }
+            }
+          }
+        }
+      }
+
+      camera.position.addScaledVector(
+        forward,
+        EXPLORE_BASE_SPEED * exploreSpeed * Math.max(speedLimiter, 0.035) * delta,
+      );
+
+      if (state.clock.elapsedTime - lastNearbyUpdate.current > 0.22) {
+        lastNearbyUpdate.current = state.clock.elapsedTime;
+        onNearbyBodyChange(detectedBody ? { ...detectedBody, distance: detectedDistance } : null);
+      }
+    }
+
+    camera.fov = THREE.MathUtils.lerp(camera.fov, size.width < 720 ? 63 : 58, 1 - Math.exp(-delta * 2.8));
+    camera.near = THREE.MathUtils.lerp(camera.near, 0.08, 1 - Math.exp(-delta * 5));
+    camera.far = THREE.MathUtils.lerp(camera.far, 520, 1 - Math.exp(-delta * 3));
+    camera.updateProjectionMatrix();
+  });
+
+  return null;
+}
+
+function SpeedStreaks({ exploreSpeed }) {
+  const { camera, size } = useThree();
+  const groupRef = useRef();
+  const materialRef = useRef();
+  const cameraForward = useMemo(() => new THREE.Vector3(), []);
+  const geometry = useMemo(() => {
+    const random = seededRandom(44321);
+    const positions = [];
+    const count = size.width < 720 ? 54 : 96;
+
+    for (let index = 0; index < count; index += 1) {
+      const angle = random() * Math.PI * 2;
+      const radius = 2.2 + random() * 18;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.62;
+      const z = -5 - random() * 78;
+      const length = 0.45 + random() * 2.6;
+      positions.push(x, y, z, x, y, z + length);
+    }
+
+    return new THREE.BufferGeometry().setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+  }, [size.width]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current || !materialRef.current) return;
+    groupRef.current.position.copy(camera.position);
+    groupRef.current.quaternion.copy(camera.quaternion);
+    groupRef.current.position.addScaledVector(
+      cameraForward.set(0, 0, -1).applyQuaternion(camera.quaternion),
+      1.8,
+    );
+    materialRef.current.opacity = THREE.MathUtils.lerp(
+      materialRef.current.opacity,
+      0.08 + exploreSpeed * 0.085,
+      1 - Math.exp(-delta * 4),
+    );
+  });
+
+  return (
+    <lineSegments ref={groupRef} geometry={geometry} frustumCulled={false}>
+      <lineBasicMaterial
+        ref={materialRef}
+        blending={THREE.AdditiveBlending}
+        color="#c5efff"
+        depthWrite={false}
+        opacity={0.12}
+        transparent
+      />
+    </lineSegments>
+  );
+}
+
+function ExploreAsteroidField() {
+  const meshRef = useRef();
+  const { camera, size } = useThree();
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const initialized = useRef(false);
+  const cameraForward = useMemo(() => new THREE.Vector3(), []);
+  const cameraRight = useMemo(() => new THREE.Vector3(), []);
+  const cameraUp = useMemo(() => new THREE.Vector3(), []);
+  const relative = useMemo(() => new THREE.Vector3(), []);
+  const asteroids = useMemo(() => {
+    const random = seededRandom(90817);
+    const count = size.width < 720 ? 22 : 42;
+    return Array.from({ length: count }, (_, index) => ({
+      depth: 7 + random() * 68,
+      index,
+      offsetX: (random() - 0.5) * 38,
+      offsetY: (random() - 0.5) * 24,
+      position: new THREE.Vector3(),
+      rotation: new THREE.Euler(random() * Math.PI, random() * Math.PI, random() * Math.PI),
+      scale: 0.032 + Math.pow(random(), 2.6) * 0.16,
+    }));
+  }, [size.width]);
+
+  useFrame(() => {
+    if (!meshRef.current) return;
+    cameraForward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    cameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    cameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+
+    if (!initialized.current) {
+      initialized.current = true;
+      asteroids.forEach((asteroid) => {
+        asteroid.position
+          .copy(camera.position)
+          .addScaledVector(cameraForward, asteroid.depth)
+          .addScaledVector(cameraRight, asteroid.offsetX)
+          .addScaledVector(cameraUp, asteroid.offsetY);
+      });
+    }
+
+    asteroids.forEach((asteroid, index) => {
+      relative.copy(asteroid.position).sub(camera.position);
+      const forwardDistance = relative.dot(cameraForward);
+      if (forwardDistance < -4 || relative.lengthSq() > 95 * 95) {
+        asteroid.depth = 48 + ((asteroid.index * 17) % 32);
+        asteroid.offsetX = (((asteroid.index * 29) % 100) / 100 - 0.5) * 38;
+        asteroid.offsetY = (((asteroid.index * 43) % 100) / 100 - 0.5) * 24;
+        asteroid.position
+          .copy(camera.position)
+          .addScaledVector(cameraForward, asteroid.depth)
+          .addScaledVector(cameraRight, asteroid.offsetX)
+          .addScaledVector(cameraUp, asteroid.offsetY);
+      }
+
+      dummy.position.copy(asteroid.position);
+      dummy.rotation.copy(asteroid.rotation);
+      dummy.scale.setScalar(asteroid.scale);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(index, dummy.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[null, null, asteroids.length]} frustumCulled={false}>
+      <dodecahedronGeometry args={[1, 0]} />
+      <meshStandardMaterial color="#504d49" metalness={0.04} roughness={1} />
+    </instancedMesh>
+  );
+}
+
+function SatelliteSystem({ bodyPositions, distanceScale = 1 }) {
+  const meshRef = useRef();
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const parentPosition = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    satelliteRecords.forEach((satellite, index) => {
+      meshRef.current.setColorAt(index, new THREE.Color(satellite.color));
+    });
+    meshRef.current.instanceColor.needsUpdate = true;
+  }, []);
+
+  useFrame((state) => {
+    if (!meshRef.current) return;
+    const localScale = distanceScale > 1 ? 1.28 : 1;
+
+    satelliteRecords.forEach((satellite, index) => {
+      const parent = bodyPositions.current.get(satellite.parentId);
+      if (!parent) return;
+      const angle = satellite.phase + state.clock.elapsedTime * satellite.speed;
+      const orbitRadius = satellite.orbitRadius * localScale;
+      parentPosition.copy(parent);
+      dummy.position.set(
+        parentPosition.x + Math.cos(angle) * orbitRadius,
+        parentPosition.y + Math.sin(angle * 0.73) * orbitRadius * 0.16,
+        parentPosition.z + Math.sin(angle) * orbitRadius,
+      );
+      dummy.rotation.set(angle * 0.3, angle * 0.7, angle * 0.18);
+      dummy.scale.setScalar(satellite.radius * (distanceScale > 1 ? 1.12 : 1));
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(index, dummy.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[null, null, satelliteRecords.length]} frustumCulled={false}>
+      <icosahedronGeometry args={[1, 3]} />
+      <meshStandardMaterial roughness={0.88} metalness={0.02} vertexColors />
+    </instancedMesh>
+  );
+}
+
 function OrbitPath({ body }) {
   const points = useMemo(() => {
     const segments = 288;
@@ -467,7 +951,7 @@ function FocusTrail({ focusLevel, selectedBodyId, bodyPositions }) {
   );
 }
 
-function AsteroidBelt() {
+function AsteroidBelt({ distanceScale = 1, immersive = false }) {
   const beltRef = useRef();
   const geometry = useMemo(() => {
     const random = seededRandom(1759);
@@ -495,9 +979,9 @@ function AsteroidBelt() {
       const y = (random() - 0.5) * 0.22 + Math.sin(angle * 2.0) * 0.035;
       const color = warm.clone().lerp(cold, random() * 0.65);
 
-      positions[index * 3] = x;
-      positions[index * 3 + 1] = y;
-      positions[index * 3 + 2] = z;
+      positions[index * 3] = x * distanceScale;
+      positions[index * 3 + 1] = y * distanceScale;
+      positions[index * 3 + 2] = z * distanceScale;
       colors[index * 3] = color.r;
       colors[index * 3 + 1] = color.g;
       colors[index * 3 + 2] = color.b;
@@ -507,7 +991,7 @@ function AsteroidBelt() {
     bufferGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     bufferGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return bufferGeometry;
-  }, []);
+  }, [distanceScale]);
 
   useFrame((_, delta) => {
     if (!beltRef.current) return;
@@ -519,8 +1003,8 @@ function AsteroidBelt() {
       <pointsMaterial
         blending={THREE.AdditiveBlending}
         depthWrite={false}
-        opacity={0.72}
-        size={0.032}
+        opacity={immersive ? 0.48 : 0.72}
+        size={immersive ? 0.027 : 0.032}
         sizeAttenuation
         transparent
         vertexColors
@@ -827,7 +1311,7 @@ function Atmosphere({ body, radius, opacity = 0.48 }) {
   );
 }
 
-function EarthBody({ body, focusLevel, isSelected, onSelectBody, onPosition }) {
+function EarthBody({ body, distanceScale = 1, focusLevel, isSelected, onSelectBody, onPosition }) {
   const groupRef = useRef();
   const cloudsRef = useRef();
   const [dayMap, nightMap, cloudMap] = useTexture([body.dayTexture, body.nightTexture, body.cloudTexture]);
@@ -858,7 +1342,7 @@ function EarthBody({ body, focusLevel, isSelected, onSelectBody, onPosition }) {
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
-    const position = getBodyPosition(body, state.clock.elapsedTime);
+    const position = getBodyPosition(body, state.clock.elapsedTime, distanceScale);
     groupRef.current.position.copy(position);
     groupRef.current.rotation.y += body.rotationSpeed * delta;
     if (cloudsRef.current) {
@@ -942,7 +1426,7 @@ function SaturnRings({ body, ringTexture }) {
   );
 }
 
-function PlanetBody({ body, focusLevel, selectedBodyId, onSelectBody, onPosition }) {
+function PlanetBody({ body, distanceScale = 1, focusLevel, selectedBodyId, onSelectBody, onPosition }) {
   const groupRef = useRef();
   const texture = useTexture(body.texture);
   const ringTexture = body.ringTexture ? useTexture(body.ringTexture) : null;
@@ -987,7 +1471,7 @@ function PlanetBody({ body, focusLevel, selectedBodyId, onSelectBody, onPosition
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
-    const position = getBodyPosition(body, state.clock.elapsedTime);
+    const position = getBodyPosition(body, state.clock.elapsedTime, distanceScale);
     groupRef.current.position.copy(position);
     groupRef.current.rotation.y += body.rotationSpeed * delta;
     const targetScale = isSelected ? (focusLevel >= 2 ? 1.04 : 1.08) : 1;
@@ -1017,7 +1501,7 @@ function PlanetBody({ body, focusLevel, selectedBodyId, onSelectBody, onPosition
   );
 }
 
-function BodyObject({ body, focusLevel, selectedBodyId, onSelectBody, onPosition }) {
+function BodyObject({ body, distanceScale = 1, focusLevel, selectedBodyId, onSelectBody, onPosition }) {
   const isSelected = selectedBodyId === body.id;
 
   if (body.id === "sun") {
@@ -1025,26 +1509,70 @@ function BodyObject({ body, focusLevel, selectedBodyId, onSelectBody, onPosition
   }
 
   if (body.id === "earth") {
-    return <EarthBody body={body} focusLevel={focusLevel} isSelected={isSelected} onPosition={onPosition} onSelectBody={onSelectBody} />;
+    return (
+      <EarthBody
+        body={body}
+        distanceScale={distanceScale}
+        focusLevel={focusLevel}
+        isSelected={isSelected}
+        onPosition={onPosition}
+        onSelectBody={onSelectBody}
+      />
+    );
   }
 
-  return <PlanetBody body={body} focusLevel={focusLevel} onPosition={onPosition} onSelectBody={onSelectBody} selectedBodyId={selectedBodyId} />;
+  return (
+    <PlanetBody
+      body={body}
+      distanceScale={distanceScale}
+      focusLevel={focusLevel}
+      onPosition={onPosition}
+      onSelectBody={onSelectBody}
+      selectedBodyId={selectedBodyId}
+    />
+  );
 }
 
-function SolarSystem({ focusLevel, selectedBodyId, onSelectBody, showCelestialGrid }) {
+function SolarSystem({
+  exploreSpeed,
+  focusLevel,
+  onExploreSpeedChange,
+  onNearbyBodyChange,
+  onSelectBody,
+  selectedBodyId,
+  showCelestialGrid,
+  viewMode,
+}) {
   const bodyPositions = useRef(new Map());
   const handlePosition = (id, position) => {
     bodyPositions.current.set(id, position.clone());
   };
-  const showOrbitalContext = focusLevel < 2;
+  const isExploring = viewMode === "explore";
+  const showOrbitalContext = focusLevel < 2 && !isExploring;
 
   return (
     <>
       <SpaceBackdrop />
       <hemisphereLight color="#20385a" groundColor="#02040a" intensity={0.08} />
       <directionalLight color="#ffcf91" intensity={0.42} position={[0, 0, 0]} />
-      <CameraRig focusLevel={focusLevel} selectedBodyId={selectedBodyId} bodyPositions={bodyPositions} />
-      {showCelestialGrid ? <CelestialCoordinateGrid /> : null}
+      {isExploring ? (
+        <ExploreCameraRig
+          bodyPositions={bodyPositions}
+          exploreSpeed={exploreSpeed}
+          onExploreSpeedChange={onExploreSpeedChange}
+          onNearbyBodyChange={onNearbyBodyChange}
+        />
+      ) : (
+        <CameraRig focusLevel={focusLevel} selectedBodyId={selectedBodyId} bodyPositions={bodyPositions} />
+      )}
+      {showCelestialGrid && !isExploring ? <CelestialCoordinateGrid /> : null}
+      {isExploring ? (
+        <>
+          <SpeedStreaks exploreSpeed={exploreSpeed} />
+          <ExploreAsteroidField />
+          <AsteroidBelt distanceScale={EXPLORE_DISTANCE_SCALE} immersive />
+        </>
+      ) : null}
 
       {showOrbitalContext
         ? bodies
@@ -1062,26 +1590,42 @@ function SolarSystem({ focusLevel, selectedBodyId, onSelectBody, showCelestialGr
         </>
       ) : null}
 
-      <FocusTrail focusLevel={focusLevel} selectedBodyId={selectedBodyId} bodyPositions={bodyPositions} />
+      {!isExploring ? (
+        <FocusTrail focusLevel={focusLevel} selectedBodyId={selectedBodyId} bodyPositions={bodyPositions} />
+      ) : null}
 
       {bodies.map((body) => (
         <BodyObject
           body={body}
+          distanceScale={isExploring ? EXPLORE_DISTANCE_SCALE : 1}
           focusLevel={focusLevel}
           key={body.id}
           onPosition={handlePosition}
-          onSelectBody={onSelectBody}
+          onSelectBody={isExploring ? () => {} : onSelectBody}
           selectedBodyId={selectedBodyId}
         />
       ))}
+      <SatelliteSystem
+        bodyPositions={bodyPositions}
+        distanceScale={isExploring ? EXPLORE_DISTANCE_SCALE : 1}
+      />
 
     </>
   );
 }
 
-export function SolarSystemScene({ focusLevel, selectedBodyId, onSelectBody, showCelestialGrid }) {
+export function SolarSystemScene({
+  exploreSpeed,
+  focusLevel,
+  onExploreSpeedChange,
+  onNearbyBodyChange,
+  onSelectBody,
+  selectedBodyId,
+  showCelestialGrid,
+  viewMode,
+}) {
   return (
-    <div className="scene-shell">
+    <div className="scene-shell" data-view-mode={viewMode}>
       <Canvas
         camera={{ fov: 41, near: 0.02, far: 260, position: [9.5, 3.2, 10.8] }}
         dpr={[1, 1.7]}
@@ -1095,10 +1639,14 @@ export function SolarSystemScene({ focusLevel, selectedBodyId, onSelectBody, sho
       >
         <Suspense fallback={null}>
           <SolarSystem
+            exploreSpeed={exploreSpeed}
             focusLevel={focusLevel}
+            onExploreSpeedChange={onExploreSpeedChange}
+            onNearbyBodyChange={onNearbyBodyChange}
             onSelectBody={onSelectBody}
             selectedBodyId={selectedBodyId}
             showCelestialGrid={showCelestialGrid}
+            viewMode={viewMode}
           />
         </Suspense>
       </Canvas>
